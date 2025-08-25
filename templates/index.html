@@ -1,11 +1,85 @@
 <!doctype html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FastAPI Project Template</title>
-<link rel="stylesheet" href="/static/style.css">
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Latency Meter</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-<h1>FastAPI Project Template</h1>
-<p>Server time: {{ server_time }}</p>
+  <header>
+    <h1>Latency Meter</h1>
+    <p>Server time: <code>{{ server_time }}</code></p>
+  </header>
+
+  <section class="controls">
+    <label>Interval (ms):
+      <input id="intervalMs" type="number" value="1500" min="200" step="100" />
+    </label>
+    <button id="startBtn">Start</button>
+    <button id="stopBtn" disabled>Stop</button>
+  </section>
+
+  <section class="stats">
+    <div><strong>Samples:</strong> <span id="count">0</span></div>
+    <div><strong>Current:</strong> <span id="cur">–</span> ms</div>
+    <div><strong>Avg:</strong> <span id="avg">–</span> ms</div>
+    <div><strong>p95:</strong> <span id="p95">–</span> ms</div>
+    <div><strong>Min:</strong> <span id="min">–</span> ms</div>
+    <div><strong>Max:</strong> <span id="max">–</span> ms</div>
+  </section>
+
+  <canvas id="chart" height="120"></canvas>
+
+  <footer><a href="/healthz" target="_blank" rel="noopener">/healthz</a></footer>
+
+  <script>
+    const ctx = document.getElementById('chart').getContext('2d');
+    const data = { labels: [], datasets: [{ label: 'RTT (ms)', data: [] }] };
+    const chart = new Chart(ctx, { type: 'line', data, options:{ animation:false, scales:{ y:{ beginAtZero:true }}}});
+
+    const state = { timer:null, maxPoints:60, samples:[] };
+    const $ = (id) => document.getElementById(id);
+
+    function percentile(arr, p) {
+      if (!arr.length) return NaN;
+      const s = [...arr].sort((a,b)=>a-b);
+      const i = Math.floor(p/100 * (s.length - 1));
+      return s[i];
+    }
+    function updateStats(rtt) {
+      const s = state.samples, sum = s.reduce((a,b)=>a+b,0);
+      $('count').textContent = s.length;
+      $('cur').textContent = isFinite(rtt) ? rtt.toFixed(1) : '–';
+      $('avg').textContent = s.length ? (sum/s.length).toFixed(1) : '–';
+      $('p95').textContent = s.length ? percentile(s,95).toFixed(1) : '–';
+      $('min').textContent = s.length ? Math.min(...s).toFixed(1) : '–';
+      $('max').textContent = s.length ? Math.max(...s).toFixed(1) : '–';
+    }
+    async function pingOnce() {
+      const t0 = performance.now();
+      try {
+        await fetch('/api/ping?nocache=' + Math.random(), { cache:'no-store' });
+        const rtt = performance.now() - t0;
+        state.samples.push(rtt); if (state.samples.length > state.maxPoints) state.samples.shift();
+        data.labels.push(''); if (data.labels.length > state.maxPoints) data.labels.shift();
+        data.datasets[0].data.push(rtt); if (data.datasets[0].data.length > state.maxPoints) data.datasets[0].data.shift();
+        chart.update(); updateStats(rtt);
+      } catch(e){ console.error(e); }
+    }
+    function start(){
+      if (state.timer) return;
+      const ms = Math.max(200, Number($('intervalMs').value || 1500));
+      $('startBtn').disabled = true; $('stopBtn').disabled = false;
+      state.timer = setInterval(pingOnce, ms); pingOnce();
+    }
+    function stop(){
+      clearInterval(state.timer); state.timer = null;
+      $('startBtn').disabled = false; $('stopBtn').disabled = true;
+    }
+    $('startBtn').addEventListener('click', start);
+    $('stopBtn').addEventListener('click', stop);
+  </script>
 </body>
 </html>
