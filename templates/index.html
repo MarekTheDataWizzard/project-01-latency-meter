@@ -4,42 +4,134 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Latency Meter</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+
+  <!-- Tailwind (CDN) for quick, clean UI -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Chart.js (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Optional: your custom tweaks -->
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
-<body>
-  <header>
-    <h1>Latency Meter</h1>
-    <p>Server time: <code>{{ server_time }}</code></p>
-  </header>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+  <div class="max-w-5xl mx-auto p-6">
+    <!-- Header -->
+    <header class="mb-6">
+      <h1 class="text-3xl font-semibold tracking-tight">Latency Meter</h1>
+      <p class="text-sm text-gray-600">Server time:
+        <code class="px-1.5 py-0.5 rounded bg-gray-100">{{ server_time }}</code>
+      </p>
+    </header>
 
-  <section class="controls">
-    <label>Interval (ms):
-      <input id="intervalMs" type="number" value="1500" min="200" step="100" />
-    </label>
-    <button id="startBtn">Start</button>
-    <button id="stopBtn" disabled>Stop</button>
-  </section>
+    <!-- Controls -->
+    <section class="mb-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="block">
+          <span class="text-sm text-gray-700">Interval (ms)</span>
+          <input id="intervalMs" type="number" value="1500" min="200" step="100"
+                 class="mt-1 w-36 rounded border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+        </label>
 
-  <section class="stats">
-    <div><strong>Samples:</strong> <span id="count">0</span></div>
-    <div><strong>Current:</strong> <span id="cur">–</span> ms</div>
-    <div><strong>Avg:</strong> <span id="avg">–</span> ms</div>
-    <div><strong>p95:</strong> <span id="p95">–</span> ms</div>
-    <div><strong>Min:</strong> <span id="min">–</span> ms</div>
-    <div><strong>Max:</strong> <span id="max">–</span> ms</div>
-  </section>
+        <div class="flex gap-2">
+          <button id="startBtn"
+                  class="inline-flex items-center rounded-lg border border-indigo-600 bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 disabled:opacity-60">
+            Start
+          </button>
+          <button id="stopBtn" disabled
+                  class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 hover:bg-gray-50 disabled:opacity-60">
+            Stop
+          </button>
+        </div>
 
-  <canvas id="chart" height="120"></canvas>
+        <a href="/healthz" target="_blank" rel="noopener"
+           class="ml-auto text-sm text-indigo-700 hover:underline">/healthz</a>
+      </div>
+    </section>
 
-  <footer><a href="/healthz" target="_blank" rel="noopener">/healthz</a></footer>
+    <!-- Stats -->
+    <section class="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="rounded-xl bg-white shadow p-3">
+        <div class="text-xs text-gray-500">Samples</div>
+        <div id="count" class="text-xl font-semibold">0</div>
+      </div>
+      <div class="rounded-xl bg-white shadow p-3">
+        <div class="text-xs text-gray-500">Current</div>
+        <div><span id="cur" class="text-xl font-semibold">–</span> <span class="text-sm text-gray-500">ms</span></div>
+      </div>
+      <div class="rounded-xl bg-white shadow p-3">
+        <div class="text-xs text-gray-500">Average</div>
+        <div><span id="avg" class="text-xl font-semibold">–</span> <span class="text-sm text-gray-500">ms</span></div>
+      </div>
+      <div class="rounded-xl bg-white shadow p-3">
+        <div class="text-xs text-gray-500">p95</div>
+        <div><span id="p95" class="text-xl font-semibold">–</span> <span class="text-sm text-gray-500">ms</span></div>
+      </div>
+      <div class="rounded-xl bg-white shadow p-3">
+        <div class="text-xs text-gray-500">Min</div>
+        <div><span id="min" class="text-xl font-semibold">–</span> <span class="text-sm text-gray-500">ms</span></div>
+      </div>
+      <div class="rounded-xl bg-white shadow p-3">
+        <div class="text-xs text-gray-500">Max</div>
+        <div><span id="max" class="text-xl font-semibold">–</span> <span class="text-sm text-gray-500">ms</span></div>
+      </div>
+    </section>
+
+    <!-- Chart card -->
+    <section class="rounded-2xl bg-white shadow p-4">
+      <canvas id="chart" height="120"></canvas>
+    </section>
+  </div>
 
   <script>
+    // Chart setup with nicer defaults
     const ctx = document.getElementById('chart').getContext('2d');
-    const data = { labels: [], datasets: [{ label: 'RTT (ms)', data: [] }] };
-    const chart = new Chart(ctx, { type: 'line', data, options:{ animation:false, scales:{ y:{ beginAtZero:true }}}});
 
-    const state = { timer:null, maxPoints:60, samples:[] };
+    // Create a soft gradient for the line fill
+    const grad = ctx.createLinearGradient(0, 0, 0, 200);
+    grad.addColorStop(0, 'rgba(99, 102, 241, 0.35)');  // indigo-500 @ 35%
+    grad.addColorStop(1, 'rgba(99, 102, 241, 0.02)');
+
+    const data = { labels: [], datasets: [{
+      label: 'RTT (ms)',
+      data: [],
+      borderColor: 'rgb(99, 102, 241)',   // indigo-500
+      backgroundColor: grad,
+      tension: 0.25,
+      borderWidth: 2,
+      pointRadius: 0,
+      fill: true,
+    }]};
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data,
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            callbacks: {
+              label: (c) => ` ${c.parsed.y.toFixed(1)} ms`
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { display: false } },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(0,0,0,0.06)' },
+            ticks: { callback: v => `${v} ms` }
+          }
+        }
+      }
+    });
+
+    const state = { timer: null, maxPoints: 90, samples: [] };
     const $ = (id) => document.getElementById(id);
 
     function percentile(arr, p) {
@@ -49,9 +141,9 @@
       return s[i];
     }
     function updateStats(rtt) {
-      const s = state.samples, sum = s.reduce((a,b)=>a+b,0);
+      const s = state.samples, sum = s.reduce((a,b)=>a+b, 0);
       $('count').textContent = s.length;
-      $('cur').textContent = isFinite(rtt) ? rtt.toFixed(1) : '–';
+      $('cur').textContent = Number.isFinite(rtt) ? rtt.toFixed(1) : '–';
       $('avg').textContent = s.length ? (sum/s.length).toFixed(1) : '–';
       $('p95').textContent = s.length ? percentile(s,95).toFixed(1) : '–';
       $('min').textContent = s.length ? Math.min(...s).toFixed(1) : '–';
@@ -60,26 +152,39 @@
     async function pingOnce() {
       const t0 = performance.now();
       try {
-        await fetch('/api/ping?nocache=' + Math.random(), { cache:'no-store' });
+        await fetch('/api/ping?nocache=' + Math.random(), { cache: 'no-store' });
         const rtt = performance.now() - t0;
-        state.samples.push(rtt); if (state.samples.length > state.maxPoints) state.samples.shift();
-        data.labels.push(''); if (data.labels.length > state.maxPoints) data.labels.shift();
-        data.datasets[0].data.push(rtt); if (data.datasets[0].data.length > state.maxPoints) data.datasets[0].data.shift();
-        chart.update(); updateStats(rtt);
-      } catch(e){ console.error(e); }
+        state.samples.push(rtt);
+        if (state.samples.length > state.maxPoints) state.samples.shift();
+
+        data.labels.push('');
+        if (data.labels.length > state.maxPoints) data.labels.shift();
+
+        data.datasets[0].data.push(rtt);
+        if (data.datasets[0].data.length > state.maxPoints) data.datasets[0].data.shift();
+
+        chart.update();
+        updateStats(rtt);
+      } catch (e) {
+        console.error(e);
+      }
     }
-    function start(){
+    function start() {
       if (state.timer) return;
       const ms = Math.max(200, Number($('intervalMs').value || 1500));
-      $('startBtn').disabled = true; $('stopBtn').disabled = false;
-      state.timer = setInterval(pingOnce, ms); pingOnce();
+      $('startBtn').disabled = true;
+      $('stopBtn').disabled = false;
+      state.timer = setInterval(pingOnce, ms);
+      pingOnce();
     }
-    function stop(){
-      clearInterval(state.timer); state.timer = null;
-      $('startBtn').disabled = false; $('stopBtn').disabled = true;
+    function stop() {
+      clearInterval(state.timer);
+      state.timer = null;
+      $('startBtn').disabled = false;
+      $('stopBtn').disabled = true;
     }
-    $('startBtn').addEventListener('click', start);
-    $('stopBtn').addEventListener('click', stop);
+    document.getElementById('startBtn').addEventListener('click', start);
+    document.getElementById('stopBtn').addEventListener('click', stop);
   </script>
 </body>
 </html>
