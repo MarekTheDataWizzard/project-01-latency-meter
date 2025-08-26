@@ -1,10 +1,11 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import datetime
 
-app = FastAPI()
+app = FastAPI(title="Latency Meter")
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -12,5 +13,13 @@ templates = Jinja2Templates(directory="templates")
 def home(request: Request):
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "server_time": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z"}
+        {"request": request, "server_time": datetime.datetime.utcnow().isoformat() + "Z"}
     )
+
+@app.get("/api/ping")
+def ping():
+    return JSONResponse({"server_utc": datetime.datetime.utcnow().isoformat() + "Z"})
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
