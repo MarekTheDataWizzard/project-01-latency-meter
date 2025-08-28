@@ -1,78 +1,41 @@
-# FastAPI Project Template
+# Project 1 — Latency Meter
 
-Base template used for each project in **90 Projects in 90 Days**.
-Index site: https://90projects.marekstepan.cz
+Live: https://p01.90projects.marekstepan.cz  
+Index: https://90projects.marekstepan.cz
 
-## Quickstart
-1) Create and activate a virtual environment
-   macOS/Linux:
-     python3 -m venv .venv
-     source .venv/bin/activate
-   Windows (PowerShell):
-     python -m venv .venv
-     .\.venv\Scripts\Activate.ps1
+FastAPI + Chart.js app that measures round-trip latency to `/api/ping` and charts it live (avg / p95 / min / max). Includes `/healthz` for health checks.
 
-2) Install dependencies
-   python -m pip install --upgrade pip
-   pip install -r requirements.txt
-
-3) Run the app (dev mode with auto-reload)
-   python -m uvicorn app.main:app --reload
-   Open http://127.0.0.1:8000
+## Run locally
+python -m venv .venv
+source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload
+# open http://127.0.0.1:8000
 
 ## Project layout
 app/
   __init__.py
-  main.py               # contains: app = FastAPI()
+  main.py           # app = FastAPI(); mounts /static; routes /, /api/ping, /healthz
 templates/
-  index.html            # Jinja template
+  index.html        # Tailwind + Chart.js UI
 static/
   style.css
 requirements.txt
-Procfile                # start command for PaaS
-tooling-diary.md
-README.md
+apprunner.yaml      # runtime: python311; pre-run installs; port 8080
 LICENSE
+README.md
 
-## Notes (templates & static)
-- Static files are mounted in main.py:
-  app.mount("/static", StaticFiles(directory="static"), name="static")
-- Reference static in templates with Jinja:
-  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+## Deploy — AWS App Runner (from source)
+- Automatic deployments from GitHub (main branch)
+- Build: handled via apprunner.yaml
+- Start: uvicorn app.main:app --host 0.0.0.0 --port 8080
+- Health check path: /healthz
+- Custom domain: p01.90projects.marekstepan.cz (CNAME → *.awsapprunner.com + ACM validation CNAMEs)
 
-## Deploy (generic PaaS)
-- Build command:  pip install -r requirements.txt
-- Start command:  uvicorn app.main:app --host 0.0.0.0 --port $PORT
-- Set environment variables in the PaaS dashboard (do not commit secrets).
-- Optional: pin Python version for builders (some platforms read this):
-  echo "python-3.12.5" > runtime.txt
-  git add runtime.txt && git commit -m "chore: pin python" && git push
-
-## Using this template
-- GitHub UI: click “Use this template” → create repo (e.g., project-01-hello-web)
-- GitHub CLI:
-  gh repo create <USER>/project-XX-... --public --template <USER>/fastapi-project-template
-
-## Troubleshooting
-- ModuleNotFoundError: No module named 'app'
-  • Run from the project root (the folder that contains the app/ directory).
-  • Ensure app/__init__.py exists.
-  • Or, if you are inside the app/ folder, run: python -m uvicorn main:app --reload
-
-- macOS Apple Silicon arch mismatch (e.g., pydantic_core x86_64 vs arm64)
-  • Recreate the venv and reinstall: 
-      rm -rf .venv
-      python3 -m venv .venv
-      source .venv/bin/activate
-      python -m pip install --upgrade pip
-      pip install -r requirements.txt
-  • Run the server via the venv interpreter:
-      python -m uvicorn app.main:app --reload
-
-## Environment variables
-- Do not commit real secrets. Keep .env files out of git.
-- Provide an example file for collaborators:
-  .env.example
+## Notes
+- No secrets in git. Use App Runner env vars / AWS SSM / Secrets Manager.
+- If port conflicts locally: run with --port 8001.
 
 ## License
 MIT — see LICENSE.
